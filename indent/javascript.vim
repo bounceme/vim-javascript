@@ -69,7 +69,7 @@ let s:msl_regex = s:continuation_regex.'\|'.s:expr_case
 let s:one_line_scope_regex = '\%(\%(\<else\>\|\<\%(if\|for\|while\)\>\s*(.*)\)\|=>\)' . s:line_term
 
 " Regex that defines blocks.
-let s:block_regex = '\%([{[]\)\s*\%(|\%([*@]\=\h\w*,\=\s*\)\%(,\s*[*@]\=\h\w*\)*|\)\=' . s:line_term
+let s:block_regex = '\%([{([]\)\s*\%(|\%([*@]\=\h\w*,\=\s*\)\%(,\s*[*@]\=\h\w*\)*|\)\=' . s:line_term
 
 let s:var_stmt = '^\s*(const\|let\|var)'
 
@@ -240,7 +240,7 @@ function s:LineHasOpeningBrackets(lnum)
     endif
     let pos = match(line, '[][(){}]', pos + 1)
   endwhile
-  return (open_0 > 0) . (open_2 > 0) . (open_4 > 0)
+  return (open_0 > 0?1:(open_0 == 0 ? 0 : 2)) . (open_2 > 0) . (open_4 > 0)
 endfunction
 
 function s:Match(lnum, regex)
@@ -301,6 +301,7 @@ function s:ExitingOneLineScope(lnum)
   endif
   return 0
 endfunction
+
 
 " 3. GetJavascriptIndent Function {{{1
 " =========================
@@ -438,9 +439,7 @@ function GetJavascriptIndent()
   if line =~ '[[({]'
     let counts = s:LineHasOpeningBrackets(lnum)
     if counts[0] == '1' && searchpair('(', '', ')', 'bW', s:skip_expr) > 0
-      if col('.') + 1 == col('$')
-        return ind + s:sw()
-      else
+      if col('.') + 1 != col('$')
         return virtcol('.')
       endif
     elseif counts[1] == '1' || counts[2] == '1'
@@ -450,6 +449,20 @@ function GetJavascriptIndent()
     end
   endif
 
+  if line =~ ')'
+    let counts = s:LineHasOpeningBrackets(lnum)
+    if counts[0] == '2'
+      let curpos = getpos(".")
+      call cursor(lnum, 1)
+      " Search for the opening tag
+      let mnum = searchpair('(', '', ')', 'bW', s:skip_expr)
+      "Restore the cursor position
+      call cursor(curpos)
+      if mnum > 0
+        return indent(mnum)
+      end
+    end
+  endif
   " 3.4. Work on the MSL line. {{{2
   " --------------------------
 
